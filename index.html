@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>치킨 공장 자동화</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      body {
+        background-color: #fff8dc;
+        font-family: "Arial", sans-serif;
+        text-align: center;
+        padding: 20px;
+        overflow-x: hidden;
+      }
+
+      h1 {
+        font-size: 2rem;
+      }
+      #chicken-img {
+        width: 150px;
+        height: 150px;
+        cursor: pointer;
+        transition: transform 0.1s ease;
+      }
+
+      #stats {
+        font-size: 1.2rem;
+        margin-bottom: 15px;
+      }
+      .shop,
+      .upgrade,
+      .achievements {
+        margin-top: 20px;
+      }
+
+      .btn {
+        padding: 10px 20px;
+        font-size: 1rem;
+        margin: 10px;
+        border: none;
+        border-radius: 10px;
+        background-color: #f4a460;
+        color: white;
+        cursor: pointer;
+      }
+
+      .btn:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+      }
+
+      .floating {
+        position: absolute;
+        color: red;
+        font-weight: bold;
+        animation: floatUp 1s ease-out forwards;
+        pointer-events: none;
+      }
+
+      @keyframes floatUp {
+        0% {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        100% {
+          opacity: 0;
+          transform: translateY(-50px);
+        }
+      }
+
+      #event-banner {
+        font-size: 1.2rem;
+        color: darkred;
+        font-weight: bold;
+      }
+
+      .achievements {
+        text-align: left;
+        max-width: 500px;
+        margin: 30px auto;
+        background: #fff3e0;
+        padding: 10px;
+        border-radius: 10px;
+      }
+
+      .achievements h3 {
+        text-align: center;
+      }
+
+      .achievements ul {
+        padding-left: 20px;
+        list-style: square;
+      }
+
+      #special-chicken {
+        position: fixed;
+        top: 20%;
+        left: -200px;
+        width: 100px;
+        z-index: 10;
+        transition: transform 0.2s;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🐥 치킨 공장 자동화</h1>
+
+    <div id="stats">
+      총 생산량: <span id="total">0</span><br />
+      현재 치킨: <span id="chickens">0</span><br />
+      초당 생산: <span id="cps">0</span><br />
+      클릭당 보상: <span id="click-power">10</span>
+    </div>
+
+    <div id="event-banner"></div>
+
+    <img
+      id="chicken-img"
+      src="https://cdn-icons-png.flaticon.com/512/1046/1046750.png"
+      alt="치킨"
+    />
+
+    <div class="shop" id="shop"></div>
+
+    <div class="upgrade">
+      <h3>🔧 클릭 업그레이드</h3>
+      <button class="btn" id="upgrade-click">클릭 보상 +10 [100🍗]</button>
+    </div>
+
+    <div class="achievements">
+      <h3>🏆 업적</h3>
+      <ul id="achievement-list"></ul>
+    </div>
+
+    <img
+      id="special-chicken"
+      src="https://cdn-icons-png.flaticon.com/512/616/616408.png"
+      alt="황금치킨"
+      style="display: none"
+    />
+
+    <script>
+      let chickens = 0,
+        totalProduced = 0,
+        cps = 0,
+        clickPower = 10,
+        clicks = 0,
+        clickUpgradeLevel = 0;
+      let bonusActive = false,
+        bonusTimer = 0,
+        specialBonus = false,
+        specialTimer = 0;
+      const unlockedAchievements = new Set();
+
+      const upgrades = Array.from({ length: 20 }, (_, i) => {
+        return {
+          id: `upgrade-${i}`,
+          gain: Math.floor(Math.pow(2, i + 1)),
+          cost: Math.floor(10 * Math.pow(1.9, i)),
+          name: `생산 설비 ${i + 1}`,
+        };
+      });
+
+      const shopContainer = document.getElementById("shop");
+      upgrades.forEach((up, i) => {
+        const btn = document.createElement("button");
+        btn.className = "btn";
+        btn.id = up.id;
+        btn.textContent = `${up.name} (+${up.gain}) [${up.cost}🍗]`;
+        btn.addEventListener("click", () => {
+          if (chickens >= up.cost) {
+            chickens -= up.cost;
+            cps += up.gain;
+            up.cost = Math.floor(up.cost * 1.6);
+            updateUI();
+          }
+        });
+        shopContainer.appendChild(btn);
+      });
+
+      document.getElementById("chicken-img").addEventListener("click", (e) => {
+        let gain = clickPower * (specialBonus ? 20 : 1);
+        chickens += gain;
+        totalProduced += gain;
+        clicks++;
+        spawnEffect(e.clientX, e.clientY, `+${gain}`);
+        checkAchievements();
+        updateUI();
+      });
+
+      function spawnEffect(x, y, text) {
+        const effect = document.createElement("div");
+        effect.className = "floating";
+        effect.textContent = text;
+        effect.style.left = `${x}px`;
+        effect.style.top = `${y}px`;
+        document.body.appendChild(effect);
+        setTimeout(() => effect.remove(), 1000);
+      }
+
+      document.getElementById("upgrade-click").addEventListener("click", () => {
+        const cost = 100 * Math.pow(2, clickUpgradeLevel);
+        if (chickens >= cost) {
+          chickens -= cost;
+          clickUpgradeLevel++;
+          clickPower += 10;
+          updateUI();
+        }
+      });
+
+      setInterval(() => {
+        let gain = cps * (bonusActive ? 2 : 1) * (specialBonus ? 20 : 1);
+        chickens += gain;
+        totalProduced += gain;
+        if (bonusActive && --bonusTimer <= 0) {
+          bonusActive = false;
+          document.getElementById("event-banner").textContent = "";
+        }
+        if (specialBonus && --specialTimer <= 0) {
+          specialBonus = false;
+          document.getElementById("event-banner").textContent = "";
+        }
+        updateUI();
+      }, 1000);
+
+      setInterval(() => {
+        if (!bonusActive && Math.random() < 0.3) {
+          bonusActive = true;
+          bonusTimer = 20;
+          document.getElementById("event-banner").textContent =
+            "🔥 치킨 붐! 생산량 2배!";
+        }
+      }, 10000);
+
+      const goldenChicken = document.getElementById("special-chicken");
+      function showGoldenChicken() {
+        goldenChicken.style.display = "block";
+        goldenChicken.style.left = "-150px";
+        let pos = -150;
+        const move = setInterval(() => {
+          pos += 2;
+          goldenChicken.style.left = `${pos}px`;
+          if (pos > window.innerWidth + 150) {
+            clearInterval(move);
+            goldenChicken.style.display = "none";
+          }
+        }, 20);
+      }
+
+      goldenChicken.addEventListener("click", () => {
+        specialBonus = true;
+        specialTimer = 30;
+        goldenChicken.style.display = "none";
+        document.getElementById("event-banner").textContent =
+          "💛 황금치킨! 클릭 + 생산 20배 (30초) 💛";
+      });
+
+      setInterval(() => {
+        showGoldenChicken();
+      }, 180000); // 3분마다 등장
+
+      function updateUI() {
+        document.getElementById("chickens").textContent = Math.floor(chickens);
+        document.getElementById("total").textContent =
+          Math.floor(totalProduced);
+        document.getElementById("cps").textContent = Math.floor(
+          cps * (bonusActive ? 2 : 1) * (specialBonus ? 20 : 1)
+        );
+        document.getElementById("click-power").textContent =
+          clickPower * (specialBonus ? 20 : 1);
+
+        upgrades.forEach((up) => {
+          const btn = document.getElementById(up.id);
+          btn.textContent = `${up.name} (+${up.gain}) [${up.cost}🍗]`;
+          btn.disabled = chickens < up.cost;
+        });
+
+        const clickCost = 100 * Math.pow(2, clickUpgradeLevel);
+        const clickBtn = document.getElementById("upgrade-click");
+        clickBtn.textContent = `클릭 보상 +10 [${clickCost}🍗]`;
+        clickBtn.disabled = chickens < clickCost;
+      }
+
+      function checkAchievements() {
+        const list = document.getElementById("achievement-list");
+        const unlock = (key, desc) => {
+          if (!unlockedAchievements.has(key)) {
+            unlockedAchievements.add(key);
+            const li = document.createElement("li");
+            li.textContent = desc;
+            list.appendChild(li);
+          }
+        };
+
+        unlock("first", "🐣 치킨 100개 생산 - 첫 걸음!");
+        if (totalProduced >= 1000)
+          unlock("pro", "🍗 1,000개 생산 - 숙련 치킨장인!");
+        if (totalProduced >= 10000)
+          unlock("master", "🔥 10,000개 생산 - 닭터지는 공장장!");
+        if (cps >= 100) unlock("fast", "⚙️ CPS 100 돌파 - 본격 자동화!");
+        if (cps >= 1000) unlock("crazy", "🌀 CPS 1000 돌파 - 속도감 미쳤다!");
+        if (clickPower >= 100)
+          unlock("clickgod", "👆 클릭 파워 100 - 손가락 부스터!");
+        if (clicks >= 500) unlock("tapmaster", "🎯 500번 클릭 - 탭의 장인");
+        if (unlockedAchievements.size >= 5)
+          unlock("multi", "🏆 업적 5개 달성 - 치킨 마스터의 길");
+        if (specialBonus)
+          unlock("golden", "💛 황금치킨 터치 - 기회는 순간이다!");
+      }
+
+      updateUI();
+    </script>
+  </body>
+</html>
